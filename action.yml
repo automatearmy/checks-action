@@ -1,0 +1,35 @@
+name: Automate Army Checks
+description: Scan with Trivy and publish SBOMs using short-lived GitHub OIDC authentication.
+inputs:
+  mode:
+    description: fs or image.
+    default: fs
+  target:
+    description: Source directory or registry image reference.
+    default: .
+  fail-on:
+    description: Gate severities, or NONE for an explicit non-blocking scan.
+    default: HIGH,CRITICAL
+  upload:
+    description: Enable uploads only from the approved reusable workflow on the default branch.
+    default: 'false'
+outputs:
+  project-uuid:
+    description: The automatically created or updated Checks project.
+    value: ${{ steps.scan.outputs.project-uuid }}
+  uploaded:
+    description: Whether the SBOM workflow completed.
+    value: ${{ steps.scan.outputs.uploaded }}
+runs:
+  using: composite
+  steps:
+    - name: Scan and publish inventory
+      id: scan
+      shell: bash
+      env:
+        CHECKS_SCRIPT: ${{ github.action_path }}/scripts/checks.py
+        CHECKS_MODE: ${{ inputs.mode }}
+        CHECKS_TARGET: ${{ inputs.target }}
+        CHECKS_FAIL_ON: ${{ inputs.fail-on }}
+        CHECKS_UPLOAD: ${{ inputs.upload }}
+      run: python3 "$CHECKS_SCRIPT" --mode "$CHECKS_MODE" --target "$CHECKS_TARGET" --fail-on "$CHECKS_FAIL_ON" --upload "$CHECKS_UPLOAD"
