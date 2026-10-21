@@ -154,13 +154,16 @@ def gate_failed(summary, severities):
 
 
 def scan(mode, target, directory):
+    cache = Path.home() / '.cache/aarmy-checks-trivy'
+    cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     base = ['docker', 'run', '--rm', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+            '--user', f'{os.getuid()}:{os.getgid()}', '--env', 'HOME=/tmp',
             '--mount', f'type=bind,src={directory},dst=/reports',
-            '--mount', 'type=volume,src=aarmy-checks-trivy-cache,dst=/root/.cache/trivy']
+            '--mount', f'type=bind,src={cache},dst=/tmp/trivy-cache']
     for name in ['TRIVY_USERNAME', 'TRIVY_PASSWORD']:
         if os.environ.get(name):
             base += ['--env', name]
-    options = ['--timeout', '15m']
+    options = ['--timeout', '15m', '--cache-dir', '/tmp/trivy-cache']
     if mode == 'fs':
         source = Path(target).resolve(strict=True)
         if not source.is_dir():
