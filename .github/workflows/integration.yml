@@ -6,4 +6,4 @@ permissions:
   id-token: write
 jobs:
   checks:
-    uses: ./.github/workflows/scan.yml
+    uses: automatearmy/checks-action/.github/workflows/scan.yml@a1eaecd98025c4d2582f5f02ad9a0cbef5e2dbd5
