@@ -1,0 +1,9 @@
+name: Integration smoke test
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  checks:
+    uses: ./.github/workflows/scan.yml

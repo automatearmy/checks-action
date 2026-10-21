@@ -1,0 +1,44 @@
+name: Checks
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: fs or image.
+        type: string
+        default: fs
+      target:
+        description: Source directory or registry image.
+        type: string
+        default: .
+      fail-on:
+        description: Gate severities, or NONE.
+        type: string
+        default: HIGH,CRITICAL
+    secrets:
+      registry-username:
+        required: false
+      registry-password:
+        required: false
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out project
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Scan and connect to Checks
+        uses: automatearmy/checks-action@b47ac5d04241f5b77bdfb871873b99e6b4380619
+        env:
+          CHECKS_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TRIVY_USERNAME: ${{ secrets.registry-username }}
+          TRIVY_PASSWORD: ${{ secrets.registry-password }}
+        with:
+          mode: ${{ inputs.mode }}
+          target: ${{ inputs.target }}
+          fail-on: ${{ inputs.fail-on }}
+          upload: ${{ github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && contains(fromJSON('["push","workflow_dispatch","schedule"]'), github.event_name) }}
