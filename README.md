@@ -1,12 +1,12 @@
 # Automate Army Checks
 
-Conecte um projeto ao [Checks](https://checks.apps.automatearmy.com/) adicionando
-um workflow. Trivy verifica dependências, configurações e segredos; o SBOM é
-enviado ao Dependency-Track com autenticação temporária do GitHub OIDC.
+Connect a project to [Checks](https://checks.apps.automatearmy.com/) by adding
+a workflow. Trivy scans dependencies, configuration, and secrets, then uploads
+the SBOM to Dependency-Track using short-lived GitHub OIDC authentication.
 
-## Conectar um projeto
+## Connect a project
 
-Nos repositórios da organização `automatearmy`, crie `.github/workflows/checks.yml`:
+In an `automatearmy` organization repository, create `.github/workflows/checks.yml`:
 
 ```yaml
 name: Checks
@@ -19,38 +19,38 @@ jobs:
     uses: automatearmy/checks-action/.github/workflows/scan.yml@v1
 ```
 
-Não precisa cadastrar UUID, criar secret nem instalar um agente no servidor.
-Na primeira execução na branch padrão, o projeto `OWNER/REPO` é criado
-automaticamente. O inventário dessa branch é atualizado a cada execução;
-o GitHub registra o commit e os resultados no resumo da execução.
+You do not need a project UUID, an API secret, or an agent installed on your server.
+The first run on the default branch automatically creates the `OWNER/REPO`
+project. Each subsequent run updates that branch's inventory. GitHub records
+the commit and displays the findings in the run summary.
 
-Também pode gerar o arquivo após clonar este repositório:
+You can also generate the workflow after cloning this repository:
 
 ```sh
-python3 /caminho/checks-action/scripts/connect.py --project-dir /caminho/do/projeto
+python3 /path/to/checks-action/scripts/connect.py --project-dir /path/to/project
 ```
 
-O instalador preserva workflows existentes e recusa sobrescrever `checks.yml`.
-Para fixar uma versão revisada, acrescente `--ref SHA_COMPLETO_DA_RELEASE`.
-Não usa `curl | bash` nem precisa de credencial administrativa no projeto.
+The installer preserves existing workflows and refuses to overwrite `checks.yml`.
+To pin a reviewed release, add `--ref FULL_RELEASE_COMMIT_SHA`.
+It does not use `curl | bash` or require an administrator credential in the project.
 
-## Comportamento
+## Behavior
 
-- Push na branch padrão, execução manual nessa branch e agendamento nessa branch:
-  varredura, autenticação OIDC, criação/atualização do projeto e espera pela análise.
-- Pull requests e outras branches: varredura local e bloqueio por severidade;
-  não solicitam token OIDC do Checks nem atualizam o inventário da branch padrão.
-- O bloqueio padrão inclui `HIGH` e `CRITICAL` em vulnerabilidades, configurações
-  inválidas e segredos. O envio do SBOM ocorre antes do bloqueio, preservando os
-  achados no painel mesmo quando o job termina com falha.
-- Só o SBOM é enviado. Código-fonte e relatório bruto de segredos permanecem no
-  runner, em diretório privado; não são publicados como artifacts nem no log.
-- O cliente falha em erro de rede, falha de processamento ou timeout de dez minutos.
-  Um envio concluído não garante que todas as fontes de vulnerabilidades estejam atualizadas.
-- Runners Linux com Docker e Python 3 são necessários. O workflow usa `ubuntu-latest`.
-  Imagens são consultadas no registry, sem montagem do socket Docker no scanner.
+- Pushes, manual runs, and scheduled runs on the default branch scan the project,
+  authenticate through OIDC, create or update its inventory, and wait for analysis.
+- Pull requests and other branches run a local scan and enforce the severity gate.
+  They do not request a Checks OIDC token or update the default branch's inventory.
+- The default gate blocks `HIGH` and `CRITICAL` vulnerabilities, misconfigurations,
+  and secrets. The SBOM is uploaded before the gate runs, so findings reach the
+  dashboard even when the job fails.
+- Only the SBOM is uploaded. Source code and raw secret findings stay in a private
+  directory on the runner. They are not published as artifacts or printed in logs.
+- The client fails on network errors, processing failures, or a ten-minute timeout.
+  A completed upload does not guarantee that all vulnerability sources are current.
+- Linux runners with Docker and Python 3 are required. The workflow uses `ubuntu-latest`.
+  Images are read from their registry without mounting the Docker socket inside the scanner.
 
-Para escanear uma imagem publicada em vez do código:
+To scan a published image instead of source code:
 
 ```yaml
 jobs:
@@ -58,62 +58,62 @@ jobs:
     uses: automatearmy/checks-action/.github/workflows/scan.yml@v1
     with:
       mode: image
-      target: ghcr.io/automatearmy/meu-projeto:versao
-    # Para registry privado, passe apenas credenciais de leitura:
+      target: ghcr.io/automatearmy/my-project:version
+    # For a private registry, pass read-only credentials:
     # secrets:
     #   registry-username: ${{ secrets.REGISTRY_USERNAME }}
     #   registry-password: ${{ secrets.REGISTRY_PASSWORD }}
 ```
 
-Inputs: `mode` (`fs` ou `image`), `target` (padrão `.`), `fail-on` (padrão
-`HIGH,CRITICAL`; `NONE` é uma opção explícita para observar sem bloquear).
-O envio ao Checks mantém a mesma regra da branch padrão.
+Inputs: `mode` (`fs` or `image`), `target` (default: `.`), and `fail-on` (default:
+`HIGH,CRITICAL`; use `NONE` explicitly for a non-blocking scan).
+Uploads follow the same default-branch rule.
 
-## Configuração única da organização
+## One-time organization setup
 
-Esta etapa é para administradores do Checks. Os projetos conectados não repetem
-o processo e não recebem a credencial administrativa.
+This step is for Checks administrators. Connected projects do not repeat this
+process and never receive the administrator credential.
 
-1. Permitir o uso desta Action privada pelos repositórios da organização em
-   Settings → Actions → General → Access, ou pela API do GitHub.
-2. Disponibilizar `CHECKS_ADMIN_KEY` ou `CHECKS_ADMIN_TOKEN` no ambiente do operador,
-   com `ACCESS_MANAGEMENT`. Não colocar o valor na linha de comando ou no Git.
-3. Revisar a release e cadastrar seu SHA completo:
+1. Allow organization repositories to use this private action under
+   Settings → Actions → General → Access, or through the GitHub API.
+2. Supply `CHECKS_ADMIN_KEY` or `CHECKS_ADMIN_TOKEN` in the operator's environment
+   with `ACCESS_MANAGEMENT` permission. Never put its value in command arguments or Git.
+3. Review the release and register its full commit SHA:
 
 ```sh
-python3 scripts/configure.py --trusted-workflow-sha SHA_COMPLETO
-python3 scripts/configure.py --trusted-workflow-sha SHA_COMPLETO --apply
+python3 scripts/configure.py --trusted-workflow-sha FULL_COMMIT_SHA
+python3 scripts/configure.py --trusted-workflow-sha FULL_COMMIT_SHA --apply
 ```
 
-A configuração registra o issuer oficial do GitHub, audience exclusiva do Checks,
-sessões de 15 minutos e uma conta de serviço com `BOM_UPLOAD`,
-`PROJECT_CREATION_UPLOAD` e `VIEW_PORTFOLIO`. Não cria chave para essa conta.
-As regras validam o ID numérico da organização, o caminho do workflow e o SHA
-exato da release aprovada; reconhecem os formatos antigo e imutável de `sub`.
-Um workflow copiado ou alterado em outro repositório não recebe essa identidade.
+Setup registers the official GitHub issuer, an audience unique to Checks,
+15-minute sessions, and a service account with `BOM_UPLOAD`,
+`PROJECT_CREATION_UPLOAD`, and `VIEW_PORTFOLIO`. It does not create an API key for that account.
+Trust rules validate the organization's numeric ID, the workflow path, and the
+exact approved release SHA. Both legacy and immutable `sub` formats are supported.
+A workflow copied or modified in another repository cannot obtain this identity.
 
-Ao atualizar, repita `--trusted-workflow-sha` para cada release que deve continuar
-autorizada. O comando é idempotente e recusa providers/contas existentes com
-configuração incompatível. Após a configuração, descarte a credencial temporária
-do operador. Pessoas continuam usando Google SSO no painel.
+When upgrading, repeat `--trusted-workflow-sha` for each release that should remain
+authorized. The command is idempotent and rejects existing providers or accounts
+with incompatible configuration. After setup, discard the operator's temporary
+credential. People continue signing in to the dashboard through Google SSO.
 
-A identidade central atende os projetos da organização; não é uma identidade
-isolada por projeto. O workflow aprovado fixa o nome do projeto ao repositório
-chamador. Requisitos de isolamento por projeto demandam contas e ACLs próprias.
+The shared identity serves organization projects; it is not a separate identity
+for each project. The approved workflow sets the project name from the calling
+repository. Project isolation requires dedicated accounts and ACLs.
 
-## Desenvolvimento
+## Development
 
 ```sh
 python3 -m unittest discover -s tests -v
 ```
 
-O workflow `Integration smoke test` executa a integração real por OIDC, sob demanda.
-O scan local pode ser executado sem autenticação:
+The `Integration smoke test` workflow runs the real OIDC integration on demand.
+You can run a local scan without authentication:
 
 ```sh
-python3 scripts/checks.py --target /caminho/do/projeto --upload false
+python3 scripts/checks.py --target /path/to/project --upload false
 ```
 
-Base da implementação: [workload identity no Dependency-Track 5.2](https://dependencytrack.github.io/docs/next/guides/administration/configuring-workload-identity-federation/),
-[OIDC no GitHub Actions](https://docs.github.com/en/actions/reference/security/oidc),
+Implementation references: [Dependency-Track 5.2 workload identity](https://dependencytrack.github.io/docs/next/guides/administration/configuring-workload-identity-federation/),
+[GitHub Actions OIDC](https://docs.github.com/en/actions/reference/security/oidc),
 [Trivy SBOM](https://trivy.dev/docs/latest/guide/supply-chain/sbom/).
