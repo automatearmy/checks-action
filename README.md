@@ -34,6 +34,24 @@ The installer preserves existing workflows and refuses to overwrite `checks.yml`
 To pin a reviewed release, add `--ref FULL_RELEASE_COMMIT_SHA`.
 It does not use `curl | bash` or require an administrator credential in the project.
 
+## Run on Carini
+
+Set `runs_on: carini` in the calling workflow to use the organization's Carini
+runner instead of a GitHub-hosted runner:
+
+```yaml
+jobs:
+  security:
+    uses: automatearmy/checks-action/.github/workflows/scan.yml@v1
+    with:
+      runs_on: carini
+```
+
+Omit `runs_on` to keep the default `ubuntu-latest`. The workflow still runs through
+GitHub Actions, with the same OIDC authentication, severity gate, and dashboard
+uploads. The calling repository must have access to an available runner labelled
+`carini`, running Linux with Python 3 and Docker available to the runner user.
+
 ## Behavior
 
 - Pushes, manual runs, and scheduled runs on the default branch scan the project,
@@ -47,7 +65,8 @@ It does not use `curl | bash` or require an administrator credential in the proj
   directory on the runner. They are not published as artifacts or printed in logs.
 - The client fails on network errors, processing failures, or a ten-minute timeout.
   A completed upload does not guarantee that all vulnerability sources are current.
-- Linux runners with Docker and Python 3 are required. The workflow uses `ubuntu-latest`.
+- Linux runners with Docker and Python 3 are required. The workflow defaults to
+  `ubuntu-latest`; use `runs_on` to select a different runner label.
   Images are read from their registry without mounting the Docker socket inside the scanner.
 
 To scan a published image instead of source code:
@@ -65,7 +84,8 @@ jobs:
     #   registry-password: ${{ secrets.REGISTRY_PASSWORD }}
 ```
 
-Inputs: `mode` (`fs` or `image`), `target` (default: `.`), and `fail-on` (default:
+Inputs: `runs_on` (default: `ubuntu-latest`; use `carini` for Carini),
+`mode` (`fs` or `image`), `target` (default: `.`), and `fail-on` (default:
 `HIGH,CRITICAL`; use `NONE` explicitly for a non-blocking scan).
 Uploads follow the same default-branch rule.
 

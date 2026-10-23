@@ -2,6 +2,10 @@ name: Checks
 on:
   workflow_call:
     inputs:
+      runs_on:
+        description: Linux runner label (ubuntu-latest or carini).
+        type: string
+        default: ubuntu-latest
       mode:
         description: fs or image.
         type: string
@@ -24,7 +28,7 @@ permissions:
   id-token: write
 jobs:
   scan:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs_on }}
     timeout-minutes: 40
     steps:
       - name: Check out project
