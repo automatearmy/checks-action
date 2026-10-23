@@ -3,9 +3,9 @@ on:
   workflow_call:
     inputs:
       runs_on:
-        description: Linux runner label (ubuntu-latest or carini).
+        description: Linux runner label (carini by default, or ubuntu-latest).
         type: string
-        default: ubuntu-latest
+        default: carini
       mode:
         description: fs or image.
         type: string

@@ -36,18 +36,18 @@ It does not use `curl | bash` or require an administrator credential in the proj
 
 ## Run on Carini
 
-Set `runs_on: carini` in the calling workflow to use the organization's Carini
-runner instead of a GitHub-hosted runner:
+Checks uses the organization's Carini runner by default. You do not need to set
+`runs_on` in the calling workflow. To use a GitHub-hosted runner instead:
 
 ```yaml
 jobs:
   security:
     uses: automatearmy/checks-action/.github/workflows/scan.yml@v1
     with:
-      runs_on: carini
+      runs_on: ubuntu-latest
 ```
 
-Omit `runs_on` to keep the default `ubuntu-latest`. The workflow still runs through
+Omit `runs_on` to keep the default `carini`. The workflow still runs through
 GitHub Actions, with the same OIDC authentication, severity gate, and dashboard
 uploads. The calling repository must have access to an available runner labelled
 `carini`, running Linux with Python 3 and Docker available to the runner user.
@@ -66,7 +66,7 @@ uploads. The calling repository must have access to an available runner labelled
 - The client fails on network errors, processing failures, or a ten-minute timeout.
   A completed upload does not guarantee that all vulnerability sources are current.
 - Linux runners with Docker and Python 3 are required. The workflow defaults to
-  `ubuntu-latest`; use `runs_on` to select a different runner label.
+  `carini`; use `runs_on: ubuntu-latest` to select a GitHub-hosted runner.
   Images are read from their registry without mounting the Docker socket inside the scanner.
 
 To scan a published image instead of source code:
@@ -84,7 +84,7 @@ jobs:
     #   registry-password: ${{ secrets.REGISTRY_PASSWORD }}
 ```
 
-Inputs: `runs_on` (default: `ubuntu-latest`; use `carini` for Carini),
+Inputs: `runs_on` (default: `carini`; use `ubuntu-latest` for a GitHub-hosted runner),
 `mode` (`fs` or `image`), `target` (default: `.`), and `fail-on` (default:
 `HIGH,CRITICAL`; use `NONE` explicitly for a non-blocking scan).
 Uploads follow the same default-branch rule.
