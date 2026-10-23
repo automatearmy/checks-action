@@ -123,7 +123,7 @@ class ChecksTests(unittest.TestCase):
         self.assertTrue(self.m.can_upload(base))
         for changed in [{'GITHUB_EVENT_NAME': 'pull_request'}, {'GITHUB_EVENT_NAME': 'pull_request_target'},
                         {'GITHUB_REF': 'refs/heads/feature'}, {'CHECKS_DEFAULT_BRANCH': ''}]:
-            self.assertFalse(self.m.can_upload(base | changed))
+            self.assertFalse(self.m.can_upload({**base, **changed}))
 
 
 if __name__ == '__main__':
