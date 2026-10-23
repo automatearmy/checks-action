@@ -51,6 +51,9 @@ Omit `runs_on` to keep the default `carini`. The workflow still runs through
 GitHub Actions, with the same OIDC authentication, severity gate, and dashboard
 uploads. The calling repository must have access to an available runner labelled
 `carini`, running Linux with Python 3 and Docker available to the runner user.
+For runners inside containers, `GITHUB_WORKSPACE` and `RUNNER_TEMP` must be shared
+with the Docker host at the same paths. Reports and the scan cache use
+`RUNNER_TEMP` when it is available.
 
 ## Behavior
 

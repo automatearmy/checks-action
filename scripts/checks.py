@@ -154,7 +154,8 @@ def gate_failed(summary, severities):
 
 
 def scan(mode, target, directory):
-    cache = Path.home() / '.cache/aarmy-checks-trivy'
+    cache_root = Path(os.environ['RUNNER_TEMP']) if os.environ.get('RUNNER_TEMP') else Path.home()
+    cache = cache_root / '.cache/aarmy-checks-trivy'
     cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     base = ['docker', 'run', '--rm', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
             '--user', f'{os.getuid()}:{os.getgid()}', '--env', 'HOME=/tmp',
@@ -191,7 +192,7 @@ def main():
     gate_failed({}, args.fail_on)
     if args.upload == 'true' and not can_upload(os.environ):
         raise RuntimeError('Uploads are allowed only on the default branch for push, manual, or scheduled runs.')
-    directory = Path(tempfile.mkdtemp(prefix='aarmy-checks-'))
+    directory = Path(tempfile.mkdtemp(prefix='aarmy-checks-', dir=os.environ.get('RUNNER_TEMP') or None))
     scan(args.mode, args.target, directory)
     summary = summarize(json.loads((directory / 'trivy.json').read_text()))
     print('Findings by severity: ' + json.dumps(summary))
