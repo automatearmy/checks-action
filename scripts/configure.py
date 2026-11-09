@@ -89,9 +89,9 @@ def isolate(client, owner, service_account, is_member):
     if team is None:
         team = client.request('/api/v1/team', 'PUT', payload={'name': service_account})
     others = [m for m in team.get('serviceAccounts') or [] if m.get('name', m.get('username')) not in (service_account, 'svc:' + service_account)]
-    if others or any(team.get(k) for k in ['permissions', 'apiKeys', 'managedUsers', 'ldapUsers', 'oidcUsers',
-                                             'mappedLdapGroups', 'mappedOidcGroups']):
-        raise RuntimeError(f'Team {service_account} has unexpected members, keys, or permissions.')
+    # People may join to see the owner's projects; other automation, keys, or permissions would widen its reach.
+    if others or any(team.get(k) for k in ['permissions', 'apiKeys']):
+        raise RuntimeError(f'Team {service_account} has unexpected service accounts, keys, or permissions.')
     if not is_member:
         username = urllib.parse.quote('svc:' + service_account, safe='')
         client.request('/api/v1/user/' + username + '/membership', 'POST', payload={'uuid': team['uuid']})
