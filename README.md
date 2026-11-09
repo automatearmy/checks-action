@@ -124,6 +124,52 @@ The shared identity serves organization projects; it is not a separate identity
 for each project. The approved workflow sets the project name from the calling
 repository. Project isolation requires dedicated accounts and ACLs.
 
+## Use outside the automatearmy organization
+
+Any GitHub organization or personal account can upload to Checks once an
+administrator registers it. Each owner gets a dedicated service account
+(`<owner>-checks`) whose trust rule pins that owner's numeric ID, so registering
+another owner never changes the `automatearmy-checks` account.
+
+This repository is private, and GitHub only lets repositories in the same
+organization or enterprise call it. External owners therefore host a mirror:
+
+```sh
+gh repo create OWNER/checks-action --private
+git clone https://github.com/automatearmy/checks-action && cd checks-action
+sed -i 's#uses: automatearmy/checks-action@#uses: OWNER/checks-action@#' .github/workflows/scan.yml
+git commit -am "build: run Checks from the OWNER mirror"
+git push https://github.com/OWNER/checks-action HEAD:main
+git tag v1 && git push https://github.com/OWNER/checks-action v1
+git rev-parse HEAD   # the SHA to trust below
+```
+
+In the mirror, allow access under Settings → Actions → General → Access
+(for a personal account: "Accessible from repositories owned by the user").
+Use `runs_on: ubuntu-latest` unless the owner has its own `carini` runner.
+
+A Checks administrator then reviews the mirror commit and registers the owner:
+
+```sh
+python3 scripts/configure.py --owner OWNER --workflow-repo OWNER/checks-action \
+  --trusted-workflow-sha MIRROR_COMMIT_SHA          # prints the plan
+python3 scripts/configure.py --owner OWNER --workflow-repo OWNER/checks-action \
+  --trusted-workflow-sha MIRROR_COMMIT_SHA --apply
+```
+
+Projects of that owner connect with:
+
+```sh
+python3 scripts/connect.py --project-dir /path/to/project --workflow-repo OWNER/checks-action
+```
+
+If this repository is made public or shared through an enterprise, skip the mirror:
+omit `--workflow-repo` and the owner calls `automatearmy/checks-action` directly.
+
+Service accounts are not isolated by default: each one can view the whole portfolio
+and upload to any project name. Register only trusted owners, or enable
+Dependency-Track portfolio access control before onboarding third parties.
+
 ## Development
 
 ```sh

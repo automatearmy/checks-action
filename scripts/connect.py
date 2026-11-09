@@ -6,9 +6,11 @@ import re
 import sys
 
 
-def workflow(ref='v1'):
+def workflow(ref='v1', repo='automatearmy/checks-action'):
     if not re.fullmatch(r'v[0-9]+(?:\.[0-9]+){0,2}|[0-9a-f]{40}', ref):
         raise ValueError('Use a release tag or a full reviewed commit SHA.')
+    if not re.fullmatch(r'[A-Za-z0-9-]+/[A-Za-z0-9_.-]+', repo):
+        raise ValueError('Use OWNER/REPO for the workflow repository.')
     return '''name: Checks
 on:
   push:
@@ -19,11 +21,11 @@ permissions:
   id-token: write
 jobs:
   security:
-    uses: automatearmy/checks-action/.github/workflows/scan.yml@''' + ref + '\n'
+    uses: ''' + repo + '/.github/workflows/scan.yml@' + ref + '\n'
 
 
-def install(directory, ref='v1'):
-    text = workflow(ref)
+def install(directory, ref='v1', repo='automatearmy/checks-action'):
+    text = workflow(ref, repo)
     directory = Path(directory).resolve(strict=True)
     if not directory.is_dir():
         raise ValueError('Project directory is invalid.')
@@ -38,9 +40,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--project-dir', default='.')
     parser.add_argument('--ref', default='v1')
+    parser.add_argument('--workflow-repo', default='automatearmy/checks-action')
     args = parser.parse_args()
     try:
-        print('Created: ' + str(install(args.project_dir, args.ref)))
+        print('Created: ' + str(install(args.project_dir, args.ref, args.workflow_repo)))
         print('Commit and push the workflow to start Checks. No project UUID or API key is needed.')
     except (ValueError, OSError) as exc:
         print(f'Error: {exc}', file=sys.stderr)
