@@ -36,7 +36,7 @@ It does not use `curl | bash` or require an administrator credential in the proj
 
 ## Run on Carini
 
-Checks uses the organization's Carini runner by default. You do not need to set
+Checks uses the Carini runner by default in `automatearmy` and `ubuntu-latest` elsewhere. You do not need to set
 `runs_on` in the calling workflow. To use a GitHub-hosted runner instead:
 
 ```yaml
@@ -47,7 +47,7 @@ jobs:
       runs_on: ubuntu-latest
 ```
 
-Omit `runs_on` to keep the default `carini`. The workflow still runs through
+Omit `runs_on` to keep the default: `carini` in `automatearmy`, `ubuntu-latest` elsewhere. The workflow still runs through
 GitHub Actions, with the same OIDC authentication, severity gate, and dashboard
 uploads. The calling repository must have access to an available runner labelled
 `carini`, running Linux with Python 3 and Docker available to the runner user.
@@ -69,7 +69,7 @@ with the Docker host at the same paths. Reports and the scan cache use
 - The client fails on network errors, processing failures, or a ten-minute timeout.
   A completed upload does not guarantee that all vulnerability sources are current.
 - Linux runners with Docker and Python 3 are required. The workflow defaults to
-  `carini`; use `runs_on: ubuntu-latest` to select a GitHub-hosted runner.
+  `carini` in `automatearmy` and `ubuntu-latest` elsewhere; set `runs_on` to override.
   Images are read from their registry without mounting the Docker socket inside the scanner.
 
 To scan a published image instead of source code:
@@ -87,7 +87,7 @@ jobs:
     #   registry-password: ${{ secrets.REGISTRY_PASSWORD }}
 ```
 
-Inputs: `runs_on` (default: `carini`; use `ubuntu-latest` for a GitHub-hosted runner),
+Inputs: `runs_on` (default: `carini` in `automatearmy`, `ubuntu-latest` elsewhere),
 `mode` (`fs` or `image`), `target` (default: `.`), and `fail-on` (default:
 `HIGH,CRITICAL`; use `NONE` explicitly for a non-blocking scan).
 Uploads follow the same default-branch rule.
@@ -104,8 +104,8 @@ process and never receive the administrator credential.
 3. Review the release and register its full commit SHA:
 
 ```sh
-python3 scripts/configure.py --trusted-workflow-sha FULL_COMMIT_SHA
-python3 scripts/configure.py --trusted-workflow-sha FULL_COMMIT_SHA --apply
+python3 scripts/configure.py --allow-self-hosted --trusted-workflow-sha FULL_COMMIT_SHA
+python3 scripts/configure.py --allow-self-hosted --trusted-workflow-sha FULL_COMMIT_SHA --apply
 ```
 
 Setup registers the official GitHub issuer, an audience unique to Checks,
@@ -126,49 +126,47 @@ repository. Project isolation requires dedicated accounts and ACLs.
 
 ## Use outside the automatearmy organization
 
-Any GitHub organization or personal account can upload to Checks once an
-administrator registers it. Each owner gets a dedicated service account
-(`<owner>-checks`) whose trust rule pins that owner's numeric ID, so registering
-another owner never changes the `automatearmy-checks` account.
+Organizations and personal accounts outside `automatearmy` get the same
+plug-and-play workflow; only the owner in `uses:` changes. This repository is
+private, so GitHub only lets other owners call a copy hosted under their name.
 
-This repository is private, and GitHub only lets repositories in the same
-organization or enterprise call it. External owners therefore host a mirror:
+**Once per owner** (anyone with admin on that owner, from a reviewed checkout):
 
 ```sh
-gh repo create OWNER/checks-action --private
-git clone https://github.com/automatearmy/checks-action && cd checks-action
-sed -i 's#uses: automatearmy/checks-action@#uses: OWNER/checks-action@#' .github/workflows/scan.yml
-git commit -am "build: run Checks from the OWNER mirror"
-git push https://github.com/OWNER/checks-action HEAD:main
-git tag v1 && git push https://github.com/OWNER/checks-action v1
-git rev-parse HEAD   # the SHA to trust below
+python3 scripts/mirror.py --owner OWNER
 ```
 
-In the mirror, allow access under Settings → Actions → General → Access
-(for a personal account: "Accessible from repositories owned by the user").
-Use `runs_on: ubuntu-latest` unless the owner has its own `carini` runner.
-
-A Checks administrator then reviews the mirror commit and registers the owner:
+It creates the private `OWNER/checks-action`, pins its scan to the mirrored
+commit, tags `v1`, allows the owner's repositories to call it, and prints the
+command a Checks administrator runs to register the owner:
 
 ```sh
-python3 scripts/configure.py --owner OWNER --workflow-repo OWNER/checks-action \
-  --trusted-workflow-sha MIRROR_COMMIT_SHA          # prints the plan
 python3 scripts/configure.py --owner OWNER --workflow-repo OWNER/checks-action \
   --trusted-workflow-sha MIRROR_COMMIT_SHA --apply
 ```
 
-Projects of that owner connect with:
+Review the mirror commit first: it differs from upstream only in `uses:` lines.
 
-```sh
-python3 scripts/connect.py --project-dir /path/to/project --workflow-repo OWNER/checks-action
+**In each repository of that owner**, add `.github/workflows/checks.yml`:
+
+```yaml
+name: Checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  security:
+    uses: OWNER/checks-action/.github/workflows/scan.yml@v1
 ```
 
-If this repository is made public or shared through an enterprise, skip the mirror:
-omit `--workflow-repo` and the owner calls `automatearmy/checks-action` directly.
-
-Service accounts are not isolated by default: each one can view the whole portfolio
-and upload to any project name. Register only trusted owners, or enable
-Dependency-Track portfolio access control before onboarding third parties.
+Outside `automatearmy` the scan runs on `ubuntu-latest`, and uploads are accepted
+only from GitHub-hosted runners: a self-hosted runner belongs to the caller, who
+could read the session token. Each owner gets a dedicated `<owner>-checks`
+service account pinned to its numeric ID, but accounts are not isolated by
+default: each can view the whole portfolio and upload to any project name.
+Register only trusted owners, or enable Dependency-Track portfolio access
+control before onboarding third parties.
 
 ## Development
 

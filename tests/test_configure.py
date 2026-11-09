@@ -73,6 +73,25 @@ class ConfigureTests(unittest.TestCase):
         posted = [p for m, path, p in client.calls if path.endswith('/workload-identity-bindings') and m == 'POST']
         self.assertEqual({b['subject'] for b in posted}, {'repo:acme/*', 'repo:acme@42/*'})
 
+    def test_external_runners_must_be_github_hosted_unless_allowed(self):
+        import configure
+        hosted = configure.bindings('acme', '42', ['b' * 40])[0]['condition']
+        self.assertTrue(hosted.endswith('claims.runner_environment == "github-hosted"'))
+        carini = configure.bindings('automatearmy', '117208740', ['b' * 40], self_hosted=True)[0]['condition']
+        self.assertNotIn('runner_environment', carini)
+
+    def test_mirror_pins_its_own_action_and_reusable_workflow(self):
+        import mirror
+        scan = (Path(__file__).resolve().parents[1] / '.github/workflows/scan.yml').read_text()
+        rewritten = mirror.rewrite(scan, 'acme', 'd' * 40)
+        self.assertIn('uses: acme/checks-action@' + 'd' * 40, rewritten)
+        self.assertNotIn('automatearmy/checks-action', rewritten)
+        caller = mirror.rewrite('    uses: automatearmy/checks-action/.github/workflows/scan.yml@v1\n', 'acme', 'd' * 40)
+        self.assertEqual(caller, '    uses: acme/checks-action/.github/workflows/scan.yml@v1\n')
+        for owner, sha in [('a/b', 'd' * 40), ('acme', 'main')]:
+            with self.subTest(owner=owner), self.assertRaises(ValueError):
+                mirror.rewrite(scan, owner, sha)
+
 
 if __name__ == '__main__':
     unittest.main()
