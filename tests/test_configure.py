@@ -79,15 +79,28 @@ class ConfigureTests(unittest.TestCase):
         acl = [p['project'] for m, path, p in client.calls if path == '/api/v1/acl/mapping']
         self.assertEqual(acl, ['p-new'])
 
-    def test_team_with_other_members_is_never_reused(self):
+    def test_team_with_other_automation_is_never_reused(self):
         import configure
 
         class FakeClient:
             def request(self, path, method='GET', payload=None):
-                return [{'uuid': 't', 'name': 'acme-checks', 'managedUsers': [{'username': 'someone'}]}]
+                return [{'uuid': 't', 'name': 'acme-checks', 'apiKeys': [{'publicId': 'x'}]}]
 
         with self.assertRaises(RuntimeError):
             configure.isolate(FakeClient(), 'acme', 'acme-checks', False)
+
+        class PeopleOnly:
+            def __init__(self):
+                self.calls = []
+
+            def request(self, path, method='GET', payload=None):
+                self.calls.append(path)
+                if path == '/api/v1/team':
+                    return [{'uuid': 't', 'name': 'acme-checks', 'oidcUsers': [{'username': 'a@acme.com'}],
+                             'serviceAccounts': [{'username': 'svc:acme-checks'}]}]
+                return []
+
+        configure.isolate(PeopleOnly(), 'acme', 'acme-checks', True)
 
         class SharedTeam:
             def request(self, path, method='GET', payload=None):
