@@ -75,6 +75,14 @@ class ConfigureTests(unittest.TestCase):
         self.assertTrue(hosted.endswith('claims.runner_environment == "github-hosted"'))
         carini = configure.bindings('automatearmy', '117208740', ['b' * 40], self_hosted=True)[0]['condition']
         self.assertNotIn('runner_environment', carini)
+    def test_owner_can_be_limited_to_specific_repositories(self):
+        import configure
+        rule = configure.bindings('acme', '42', ['b' * 40], repository_ids=['7', '5'])[0]['condition']
+        self.assertIn('claims.repository_id in ["5", "7"]', rule)
+        self.assertNotIn('repository_id', configure.bindings('acme', '42', ['b' * 40])[0]['condition'])
+        with self.assertRaises(ValueError):
+            configure.bindings('acme', '42', ['b' * 40], repository_ids=['acme/repo'])
+
 
 if __name__ == '__main__':
     unittest.main()

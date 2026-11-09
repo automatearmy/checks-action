@@ -11,14 +11,17 @@ import urllib.parse
 from checks import PROVIDER, ORIGIN, ApiError, Client, account
 
 
-def bindings(owner, owner_id, commits, self_hosted=False):
+def bindings(owner, owner_id, commits, self_hosted=False, repository_ids=()):
     if (not re.fullmatch(r'[A-Za-z0-9-]+', owner) or not re.fullmatch(r'[0-9]+', owner_id)
-            or not commits or any(not re.fullmatch(r'[0-9a-f]{40}', sha) for sha in commits)):
+            or not commits or any(not re.fullmatch(r'[0-9a-f]{40}', sha) for sha in commits)
+            or any(not re.fullmatch(r'[0-9]+', rid) for rid in repository_ids)):
         raise ValueError('Supply an owner, numeric owner ID, and full reviewed workflow SHAs.')
     rule = (f'claims.repository_owner_id == {json.dumps(owner_id)} && '
             'claims.job_workflow_ref.startsWith("automatearmy/checks-action/.github/workflows/scan.yml@") && '
             f'claims.job_workflow_sha in {json.dumps(sorted(set(commits)))} && '
             'claims.event_name in ["push", "schedule", "workflow_dispatch"]')
+    if repository_ids:
+        rule += f' && claims.repository_id in {json.dumps(sorted(set(repository_ids)))}'
     if not self_hosted:
         # A self-hosted runner belongs to the caller, who could read the session token from memory.
         rule += ' && claims.runner_environment == "github-hosted"'
@@ -28,8 +31,8 @@ def bindings(owner, owner_id, commits, self_hosted=False):
             for subject in [f'repo:{owner}/*', f'repo:{owner}@{owner_id}/*']]
 
 
-def configure(client, owner, owner_id, commits, self_hosted=False):
-    wanted = bindings(owner, owner_id, commits, self_hosted)
+def configure(client, owner, owner_id, commits, self_hosted=False, repository_ids=()):
+    wanted = bindings(owner, owner_id, commits, self_hosted, repository_ids)
     service_account = account(owner)
     provider_path = '/api/v2/workload-identity-providers/' + PROVIDER
     provider = {'name': PROVIDER, 'type': 'OIDC', 'issuer': 'https://token.actions.githubusercontent.com',
@@ -84,10 +87,17 @@ def main():
     parser.add_argument('--trusted-workflow-sha', action='append', required=True)
     parser.add_argument('--allow-self-hosted', action='store_true',
                         help='Trust self-hosted runners such as carini; only for owners that run their own trusted runners.')
+    parser.add_argument('--repository', action='append', default=[], metavar='OWNER/REPO',
+                        help='Limit uploads to these repositories of the owner; omit to allow all of them.')
     parser.add_argument('--apply', action='store_true', help='Apply the reviewed organization configuration.')
     args = parser.parse_args()
     owner_id = subprocess.check_output(['gh', 'api', 'users/' + args.owner, '--jq', '.id'], text=True).strip()
-    plan = bindings(args.owner, owner_id, args.trusted_workflow_sha, args.allow_self_hosted)
+    repository_ids = []
+    for repository in args.repository:
+        if not re.fullmatch(rf'{re.escape(args.owner)}/[A-Za-z0-9_.-]+', repository, re.IGNORECASE):
+            raise ValueError(f'{repository} is not a repository of {args.owner}.')
+        repository_ids.append(subprocess.check_output(['gh', 'api', 'repos/' + repository, '--jq', '.id'], text=True).strip())
+    plan = bindings(args.owner, owner_id, args.trusted_workflow_sha, args.allow_self_hosted, repository_ids)
     if not args.apply:
         print(json.dumps({'origin': ORIGIN, 'service_account': account(args.owner), 'bindings': plan}, indent=2))
         return
@@ -95,7 +105,7 @@ def main():
     if not (key or token):
         raise ValueError('An administrator must supply CHECKS_ADMIN_KEY or CHECKS_ADMIN_TOKEN for this one-time setup.')
     configure(Client(token=token, api_key=key), args.owner, owner_id, args.trusted_workflow_sha,
-              args.allow_self_hosted)
+              args.allow_self_hosted, repository_ids)
 
 
 if __name__ == '__main__':

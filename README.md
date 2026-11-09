@@ -134,6 +134,9 @@ python3 scripts/configure.py --owner OWNER --trusted-workflow-sha FULL_COMMIT_SH
 python3 scripts/configure.py --owner OWNER --trusted-workflow-sha FULL_COMMIT_SHA --apply
 ```
 
+Add `--repository OWNER/REPO` (repeatable) to limit uploads to specific
+repositories by their numeric IDs; without it, every repository of the owner may upload.
+
 Each owner gets a dedicated `<owner>-checks` service account pinned to its
 numeric ID. Its uploads are accepted only from this repository's approved
 workflow release and only from GitHub-hosted runners, because a self-hosted
