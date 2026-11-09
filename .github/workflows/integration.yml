@@ -7,3 +7,5 @@ permissions:
 jobs:
   checks:
     uses: automatearmy/checks-action/.github/workflows/scan.yml@v1
+    with:
+      runs_on: ubuntu-latest

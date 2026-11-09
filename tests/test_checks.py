@@ -56,7 +56,7 @@ class ChecksTests(unittest.TestCase):
             return 200, {'access_token': 'short-session', 'token_type': 'Bearer', 'expires_in': 900}, {}
 
         with server(respond) as url:
-            self.assertEqual(self.m.exchange(self.m.Client(url), 'github-token'), 'short-session')
+            self.assertEqual(self.m.exchange(self.m.Client(url), 'github-token', 'automatearmy'), 'short-session')
 
     def test_authenticated_upload_autocreates_repo_and_waits_for_completed(self):
         paths = []

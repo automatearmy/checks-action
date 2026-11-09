@@ -3,9 +3,9 @@ on:
   workflow_call:
     inputs:
       runs_on:
-        description: Linux runner label (carini by default, or ubuntu-latest).
+        description: Linux runner label. Empty selects carini in automatearmy and ubuntu-latest elsewhere.
         type: string
-        default: carini
+        default: ''
       mode:
         description: fs or image.
         type: string
@@ -28,7 +28,7 @@ permissions:
   id-token: write
 jobs:
   scan:
-    runs-on: ${{ inputs.runs_on }}
+    runs-on: ${{ inputs.runs_on || (github.repository_owner == 'automatearmy' && 'carini' || 'ubuntu-latest') }}
     timeout-minutes: 40
     steps:
       - name: Check out project

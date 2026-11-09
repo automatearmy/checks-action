@@ -6,7 +6,7 @@ the SBOM to Dependency-Track using short-lived GitHub OIDC authentication.
 
 ## Connect a project
 
-In an `automatearmy` organization repository, create `.github/workflows/checks.yml`:
+In any repository whose owner is registered with Checks, create `.github/workflows/checks.yml`:
 
 ```yaml
 name: Checks
@@ -36,7 +36,7 @@ It does not use `curl | bash` or require an administrator credential in the proj
 
 ## Run on Carini
 
-Checks uses the organization's Carini runner by default. You do not need to set
+Checks uses the Carini runner by default in `automatearmy` and `ubuntu-latest` elsewhere. You do not need to set
 `runs_on` in the calling workflow. To use a GitHub-hosted runner instead:
 
 ```yaml
@@ -47,7 +47,7 @@ jobs:
       runs_on: ubuntu-latest
 ```
 
-Omit `runs_on` to keep the default `carini`. The workflow still runs through
+Omit `runs_on` to keep the default: `carini` in `automatearmy`, `ubuntu-latest` elsewhere. The workflow still runs through
 GitHub Actions, with the same OIDC authentication, severity gate, and dashboard
 uploads. The calling repository must have access to an available runner labelled
 `carini`, running Linux with Python 3 and Docker available to the runner user.
@@ -69,7 +69,7 @@ with the Docker host at the same paths. Reports and the scan cache use
 - The client fails on network errors, processing failures, or a ten-minute timeout.
   A completed upload does not guarantee that all vulnerability sources are current.
 - Linux runners with Docker and Python 3 are required. The workflow defaults to
-  `carini`; use `runs_on: ubuntu-latest` to select a GitHub-hosted runner.
+  `carini` in `automatearmy` and `ubuntu-latest` elsewhere; set `runs_on` to override.
   Images are read from their registry without mounting the Docker socket inside the scanner.
 
 To scan a published image instead of source code:
@@ -87,7 +87,7 @@ jobs:
     #   registry-password: ${{ secrets.REGISTRY_PASSWORD }}
 ```
 
-Inputs: `runs_on` (default: `carini`; use `ubuntu-latest` for a GitHub-hosted runner),
+Inputs: `runs_on` (default: `carini` in `automatearmy`, `ubuntu-latest` elsewhere),
 `mode` (`fs` or `image`), `target` (default: `.`), and `fail-on` (default:
 `HIGH,CRITICAL`; use `NONE` explicitly for a non-blocking scan).
 Uploads follow the same default-branch rule.
@@ -97,15 +97,13 @@ Uploads follow the same default-branch rule.
 This step is for Checks administrators. Connected projects do not repeat this
 process and never receive the administrator credential.
 
-1. Allow organization repositories to use this private action under
-   Settings → Actions → General → Access, or through the GitHub API.
-2. Supply `CHECKS_ADMIN_KEY` or `CHECKS_ADMIN_TOKEN` in the operator's environment
+1. Supply `CHECKS_ADMIN_KEY` or `CHECKS_ADMIN_TOKEN` in the operator's environment
    with `ACCESS_MANAGEMENT` permission. Never put its value in command arguments or Git.
-3. Review the release and register its full commit SHA:
+2. Review the release and register its full commit SHA:
 
 ```sh
-python3 scripts/configure.py --trusted-workflow-sha FULL_COMMIT_SHA
-python3 scripts/configure.py --trusted-workflow-sha FULL_COMMIT_SHA --apply
+python3 scripts/configure.py --allow-self-hosted --trusted-workflow-sha FULL_COMMIT_SHA
+python3 scripts/configure.py --allow-self-hosted --trusted-workflow-sha FULL_COMMIT_SHA --apply
 ```
 
 Setup registers the official GitHub issuer, an audience unique to Checks,
@@ -123,6 +121,26 @@ credential. People continue signing in to the dashboard through Google SSO.
 The shared identity serves organization projects; it is not a separate identity
 for each project. The approved workflow sets the project name from the calling
 repository. Project isolation requires dedicated accounts and ACLs.
+
+## Use outside the automatearmy organization
+
+Repositories owned by other organizations or personal accounts use the same
+workflow shown above, unchanged. They run on `ubuntu-latest`; set `runs_on` to override.
+
+A Checks administrator registers each owner once; the owner runs nothing:
+
+```sh
+python3 scripts/configure.py --owner OWNER --trusted-workflow-sha FULL_COMMIT_SHA          # prints the plan
+python3 scripts/configure.py --owner OWNER --trusted-workflow-sha FULL_COMMIT_SHA --apply
+```
+
+Each owner gets a dedicated `<owner>-checks` service account pinned to its
+numeric ID. Its uploads are accepted only from this repository's approved
+workflow release and only from GitHub-hosted runners, because a self-hosted
+runner belongs to the caller, who could read the session token. Accounts are not
+isolated by default: each can view the whole portfolio and upload to any project
+name. Register only trusted owners, or enable Dependency-Track portfolio access
+control before onboarding third parties.
 
 ## Development
 

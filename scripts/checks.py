@@ -18,7 +18,6 @@ import uuid
 
 ORIGIN = 'https://checks.apps.automatearmy.com'
 PROVIDER = 'github-actions-checks'
-ACCOUNT = 'automatearmy-checks'
 TRIVY = 'aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c'
 SEVERITIES = {'UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'}
 
@@ -99,11 +98,17 @@ def github_token(audience):
         raise RuntimeError('GitHub OIDC token request failed.') from None
 
 
-def exchange(client, subject):
+def account(owner):
+    if not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})', owner):
+        raise ValueError('Invalid GitHub owner.')
+    return owner.lower() + '-checks'
+
+
+def exchange(client, subject, owner):
     result = client.request('/api/v2/oauth/token', 'POST', form={
         'grant_type': 'urn:ietf:params:oauth:grant-type:token-exchange',
         'subject_token_type': 'urn:ietf:params:oauth:token-type:jwt',
-        'subject_token': subject, 'workload_identity_provider': PROVIDER, 'service_account': ACCOUNT})
+        'subject_token': subject, 'workload_identity_provider': PROVIDER, 'service_account': account(owner)})
     if result.get('token_type') != 'Bearer':
         raise RuntimeError('Checks returned an invalid token type.')
     return mask(result['access_token'])
@@ -201,7 +206,7 @@ def main():
         repository = os.environ['GITHUB_REPOSITORY']
         if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
             raise ValueError('Invalid GitHub repository.')
-        session = exchange(Client(), github_token(ORIGIN))
+        session = exchange(Client(), github_token(ORIGIN), repository.split('/')[0])
         client = Client(token=session)
         upload(client, (directory / 'bom.cdx.json').read_bytes(), repository, os.environ['CHECKS_DEFAULT_BRANCH'])
         query = urllib.parse.urlencode({'name': repository, 'version': os.environ['CHECKS_DEFAULT_BRANCH']})
