@@ -55,7 +55,8 @@ def configure(client, owner, owner_id, commits, self_hosted=False, repository_id
         client.request('/api/v2/service-accounts', 'POST', payload={'name': service_account})
         svc = {'permissions': [], 'teams': []}
     required = {'BOM_UPLOAD', 'PROJECT_CREATION_UPLOAD', 'VIEW_PORTFOLIO'}
-    if svc.get('suspended') or svc.get('teams') or set(svc.get('permissions', [])) - required:
+    teams = {t if isinstance(t, str) else t.get('name') for t in svc.get('teams') or []}
+    if svc.get('suspended') or teams - {service_account} or set(svc.get('permissions', [])) - required:
         raise RuntimeError('Existing automation account has unexpected membership or privileges.')
     for permission in sorted(required - set(svc.get('permissions', []))):
         username = urllib.parse.quote('svc:' + service_account, safe='')
@@ -77,7 +78,33 @@ def configure(client, owner, owner_id, commits, self_hosted=False, repository_id
         for existing in matches:
             client.request(path + '/' + existing['uuid'], 'DELETE')
         client.request(path, 'POST', payload=item)
+    isolate(client, owner, service_account, service_account in teams)
     print(f'{owner} connected with GitHub OIDC as {service_account}. No CI API key was created.')
+
+
+def isolate(client, owner, service_account, is_member):
+    # Under portfolio access control a service account reaches only projects whose ACL lists its team,
+    # and projects it creates get its first team, so each owner gets exactly one dedicated team.
+    team = next((t for t in client.request('/api/v1/team') if t.get('name') == service_account), None)
+    if team is None:
+        team = client.request('/api/v1/team', 'PUT', payload={'name': service_account})
+    others = [m for m in team.get('serviceAccounts') or [] if m.get('name', m.get('username')) not in (service_account, 'svc:' + service_account)]
+    if others or any(team.get(k) for k in ['permissions', 'apiKeys', 'managedUsers', 'ldapUsers', 'oidcUsers',
+                                             'mappedLdapGroups', 'mappedOidcGroups']):
+        raise RuntimeError(f'Team {service_account} has unexpected members, keys, or permissions.')
+    if not is_member:
+        username = urllib.parse.quote('svc:' + service_account, safe='')
+        client.request('/api/v1/user/' + username + '/membership', 'POST', payload={'uuid': team['uuid']})
+    granted = {p['uuid'] for p in client.request('/api/v1/acl/team/' + team['uuid']) or []}
+    prefix, page = owner.lower() + '/', 1
+    while True:
+        projects = client.request(f'/api/v1/project?pageSize=100&pageNumber={page}&excludeInactive=false') or []
+        for project in projects:
+            if project['name'].lower().startswith(prefix) and project['uuid'] not in granted:
+                client.request('/api/v1/acl/mapping', 'PUT', payload={'team': team['uuid'], 'project': project['uuid']})
+        if len(projects) < 100:
+            return
+        page += 1
 
 
 def main():

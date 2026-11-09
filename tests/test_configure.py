@@ -41,7 +41,7 @@ class ConfigureTests(unittest.TestCase):
             with self.subTest(owner=owner), self.assertRaises(ValueError):
                 checks.account(owner)
 
-    def test_configure_creates_a_separate_account_for_a_new_owner(self):
+    def test_configure_creates_a_separate_account_and_isolated_team_for_a_new_owner(self):
         import configure
 
         class FakeClient:
@@ -59,15 +59,42 @@ class ConfigureTests(unittest.TestCase):
                     raise configure.ApiError(404)
                 if method == 'GET' and path.endswith('/workload-identity-bindings?limit=1000'):
                     return {'items': []}
+                if path == '/api/v1/team':
+                    return [{'uuid': 'other', 'name': 'Administrators'}] if method == 'GET' else {'uuid': 'team-1', 'name': 'acme-checks'}
+                if path.startswith('/api/v1/acl/team/'):
+                    return [{'uuid': 'p-granted'}]
+                if path.startswith('/api/v1/project?'):
+                    return [{'uuid': 'p-new', 'name': 'acme/app'}, {'uuid': 'p-granted', 'name': 'ACME/api'},
+                            {'uuid': 'p-other', 'name': 'automatearmy/app'}, {'uuid': 'p-lookalike', 'name': 'acme-labs/app'}]
                 return None
 
         client = FakeClient()
         configure.configure(client, 'acme', '42', ['c' * 40])
-        touched = {path for _, path, _ in client.calls}
         self.assertIn(('POST', '/api/v2/service-accounts', {'name': 'acme-checks'}), client.calls)
-        self.assertFalse(any('automatearmy-checks' in path for path in touched))
+        self.assertFalse(any('automatearmy-checks' in path for _, path, _ in client.calls))
         posted = [p for m, path, p in client.calls if path.endswith('/workload-identity-bindings') and m == 'POST']
         self.assertEqual({b['subject'] for b in posted}, {'repo:acme/*', 'repo:acme@42/*'})
+        self.assertIn(('PUT', '/api/v1/team', {'name': 'acme-checks'}), client.calls)
+        self.assertIn(('POST', '/api/v1/user/svc%3Aacme-checks/membership', {'uuid': 'team-1'}), client.calls)
+        acl = [p['project'] for m, path, p in client.calls if path == '/api/v1/acl/mapping']
+        self.assertEqual(acl, ['p-new'])
+
+    def test_team_with_other_members_is_never_reused(self):
+        import configure
+
+        class FakeClient:
+            def request(self, path, method='GET', payload=None):
+                return [{'uuid': 't', 'name': 'acme-checks', 'managedUsers': [{'username': 'someone'}]}]
+
+        with self.assertRaises(RuntimeError):
+            configure.isolate(FakeClient(), 'acme', 'acme-checks', False)
+
+        class SharedTeam:
+            def request(self, path, method='GET', payload=None):
+                return [{'uuid': 't', 'name': 'acme-checks', 'serviceAccounts': [{'name': 'other-checks'}]}]
+
+        with self.assertRaises(RuntimeError):
+            configure.isolate(SharedTeam(), 'acme', 'acme-checks', True)
 
     def test_external_runners_must_be_github_hosted_unless_allowed(self):
         import configure

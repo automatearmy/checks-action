@@ -140,10 +140,10 @@ repositories by their numeric IDs; without it, every repository of the owner may
 Each owner gets a dedicated `<owner>-checks` service account pinned to its
 numeric ID. Its uploads are accepted only from this repository's approved
 workflow release and only from GitHub-hosted runners, because a self-hosted
-runner belongs to the caller, who could read the session token. Accounts are not
-isolated by default: each can view the whole portfolio and upload to any project
-name. Register only trusted owners, or enable Dependency-Track portfolio access
-control before onboarding third parties.
+runner belongs to the caller, who could read the session token. Setup also gives each account
+a dedicated team holding only that account and grants it the owner's existing
+`OWNER/*` projects. With portfolio access control enabled, an owner sees and
+updates only its own projects; humans need `PORTFOLIO_ACCESS_CONTROL_BYPASS` or an ACL.
 
 ## Development
 
