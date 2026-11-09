@@ -6,7 +6,7 @@ the SBOM to Dependency-Track using short-lived GitHub OIDC authentication.
 
 ## Connect a project
 
-In an `automatearmy` organization repository, create `.github/workflows/checks.yml`:
+In any repository whose owner is registered with Checks, create `.github/workflows/checks.yml`:
 
 ```yaml
 name: Checks
@@ -97,11 +97,9 @@ Uploads follow the same default-branch rule.
 This step is for Checks administrators. Connected projects do not repeat this
 process and never receive the administrator credential.
 
-1. Allow organization repositories to use this private action under
-   Settings → Actions → General → Access, or through the GitHub API.
-2. Supply `CHECKS_ADMIN_KEY` or `CHECKS_ADMIN_TOKEN` in the operator's environment
+1. Supply `CHECKS_ADMIN_KEY` or `CHECKS_ADMIN_TOKEN` in the operator's environment
    with `ACCESS_MANAGEMENT` permission. Never put its value in command arguments or Git.
-3. Review the release and register its full commit SHA:
+2. Review the release and register its full commit SHA:
 
 ```sh
 python3 scripts/configure.py --allow-self-hosted --trusted-workflow-sha FULL_COMMIT_SHA
@@ -126,46 +124,22 @@ repository. Project isolation requires dedicated accounts and ACLs.
 
 ## Use outside the automatearmy organization
 
-Organizations and personal accounts outside `automatearmy` get the same
-plug-and-play workflow; only the owner in `uses:` changes. This repository is
-private, so GitHub only lets other owners call a copy hosted under their name.
+Repositories owned by other organizations or personal accounts use the same
+workflow shown above, unchanged. They run on `ubuntu-latest`; set `runs_on` to override.
 
-**Once per owner** (anyone with admin on that owner, from a reviewed checkout):
-
-```sh
-python3 scripts/mirror.py --owner OWNER
-```
-
-It creates the private `OWNER/checks-action`, pins its scan to the mirrored
-commit, tags `v1`, allows the owner's repositories to call it, and prints the
-command a Checks administrator runs to register the owner:
+A Checks administrator registers each owner once; the owner runs nothing:
 
 ```sh
-python3 scripts/configure.py --owner OWNER --workflow-repo OWNER/checks-action \
-  --trusted-workflow-sha MIRROR_COMMIT_SHA --apply
+python3 scripts/configure.py --owner OWNER --trusted-workflow-sha FULL_COMMIT_SHA          # prints the plan
+python3 scripts/configure.py --owner OWNER --trusted-workflow-sha FULL_COMMIT_SHA --apply
 ```
 
-Review the mirror commit first: it differs from upstream only in `uses:` lines.
-
-**In each repository of that owner**, add `.github/workflows/checks.yml`:
-
-```yaml
-name: Checks
-on: [push, pull_request, workflow_dispatch]
-permissions:
-  contents: read
-  id-token: write
-jobs:
-  security:
-    uses: OWNER/checks-action/.github/workflows/scan.yml@v1
-```
-
-Outside `automatearmy` the scan runs on `ubuntu-latest`, and uploads are accepted
-only from GitHub-hosted runners: a self-hosted runner belongs to the caller, who
-could read the session token. Each owner gets a dedicated `<owner>-checks`
-service account pinned to its numeric ID, but accounts are not isolated by
-default: each can view the whole portfolio and upload to any project name.
-Register only trusted owners, or enable Dependency-Track portfolio access
+Each owner gets a dedicated `<owner>-checks` service account pinned to its
+numeric ID. Its uploads are accepted only from this repository's approved
+workflow release and only from GitHub-hosted runners, because a self-hosted
+runner belongs to the caller, who could read the session token. Accounts are not
+isolated by default: each can view the whole portfolio and upload to any project
+name. Register only trusted owners, or enable Dependency-Track portfolio access
 control before onboarding third parties.
 
 ## Development

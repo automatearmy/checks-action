@@ -25,17 +25,13 @@ class ConfigureTests(unittest.TestCase):
             with self.subTest(org=org, commits=commits), self.assertRaises(ValueError):
                 configure.bindings(org, owner_id, commits)
 
-    def test_external_owner_trusts_its_own_id_and_the_chosen_workflow_repo(self):
+    def test_external_owner_trusts_its_own_id_and_only_the_upstream_workflow(self):
         import configure
-        bindings = configure.bindings('Acme-Labs', '42', ['b' * 40], 'Acme-Labs/checks-action')
+        bindings = configure.bindings('Acme-Labs', '42', ['b' * 40])
         self.assertEqual({b['subject'] for b in bindings}, {'repo:Acme-Labs/*', 'repo:Acme-Labs@42/*'})
         for binding in bindings:
             self.assertIn('claims.repository_owner_id == "42"', binding['condition'])
-            self.assertIn('"Acme-Labs/checks-action/.github/workflows/scan.yml@"', binding['condition'])
-        default = configure.bindings('acme', '42', ['b' * 40])
-        self.assertIn('"automatearmy/checks-action/.github/workflows/scan.yml@"', default[0]['condition'])
-        with self.assertRaises(ValueError):
-            configure.bindings('acme', '42', ['b' * 40], 'not a repo')
+            self.assertIn('startsWith("automatearmy/checks-action/.github/workflows/scan.yml@")', binding['condition'])
 
     def test_each_owner_gets_a_dedicated_account(self):
         import checks
@@ -66,7 +62,7 @@ class ConfigureTests(unittest.TestCase):
                 return None
 
         client = FakeClient()
-        configure.configure(client, 'acme', '42', ['c' * 40], 'acme/checks-action')
+        configure.configure(client, 'acme', '42', ['c' * 40])
         touched = {path for _, path, _ in client.calls}
         self.assertIn(('POST', '/api/v2/service-accounts', {'name': 'acme-checks'}), client.calls)
         self.assertFalse(any('automatearmy-checks' in path for path in touched))
@@ -79,19 +75,6 @@ class ConfigureTests(unittest.TestCase):
         self.assertTrue(hosted.endswith('claims.runner_environment == "github-hosted"'))
         carini = configure.bindings('automatearmy', '117208740', ['b' * 40], self_hosted=True)[0]['condition']
         self.assertNotIn('runner_environment', carini)
-
-    def test_mirror_pins_its_own_action_and_reusable_workflow(self):
-        import mirror
-        scan = (Path(__file__).resolve().parents[1] / '.github/workflows/scan.yml').read_text()
-        rewritten = mirror.rewrite(scan, 'acme', 'd' * 40)
-        self.assertIn('uses: acme/checks-action@' + 'd' * 40, rewritten)
-        self.assertNotIn('automatearmy/checks-action', rewritten)
-        caller = mirror.rewrite('    uses: automatearmy/checks-action/.github/workflows/scan.yml@v1\n', 'acme', 'd' * 40)
-        self.assertEqual(caller, '    uses: acme/checks-action/.github/workflows/scan.yml@v1\n')
-        for owner, sha in [('a/b', 'd' * 40), ('acme', 'main')]:
-            with self.subTest(owner=owner), self.assertRaises(ValueError):
-                mirror.rewrite(scan, owner, sha)
-
 
 if __name__ == '__main__':
     unittest.main()

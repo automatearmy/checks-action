@@ -10,16 +10,13 @@ import urllib.parse
 
 from checks import PROVIDER, ORIGIN, ApiError, Client, account
 
-WORKFLOW_REPO = 'automatearmy/checks-action'
 
-
-def bindings(owner, owner_id, commits, workflow_repo=WORKFLOW_REPO, self_hosted=False):
+def bindings(owner, owner_id, commits, self_hosted=False):
     if (not re.fullmatch(r'[A-Za-z0-9-]+', owner) or not re.fullmatch(r'[0-9]+', owner_id)
-            or not re.fullmatch(r'[A-Za-z0-9-]+/[A-Za-z0-9_.-]+', workflow_repo)
             or not commits or any(not re.fullmatch(r'[0-9a-f]{40}', sha) for sha in commits)):
-        raise ValueError('Supply an owner, numeric owner ID, workflow repository, and full reviewed workflow SHAs.')
+        raise ValueError('Supply an owner, numeric owner ID, and full reviewed workflow SHAs.')
     rule = (f'claims.repository_owner_id == {json.dumps(owner_id)} && '
-            f'claims.job_workflow_ref.startsWith({json.dumps(workflow_repo + "/.github/workflows/scan.yml@")}) && '
+            'claims.job_workflow_ref.startsWith("automatearmy/checks-action/.github/workflows/scan.yml@") && '
             f'claims.job_workflow_sha in {json.dumps(sorted(set(commits)))} && '
             'claims.event_name in ["push", "schedule", "workflow_dispatch"]')
     if not self_hosted:
@@ -31,8 +28,8 @@ def bindings(owner, owner_id, commits, workflow_repo=WORKFLOW_REPO, self_hosted=
             for subject in [f'repo:{owner}/*', f'repo:{owner}@{owner_id}/*']]
 
 
-def configure(client, owner, owner_id, commits, workflow_repo=WORKFLOW_REPO, self_hosted=False):
-    wanted = bindings(owner, owner_id, commits, workflow_repo, self_hosted)
+def configure(client, owner, owner_id, commits, self_hosted=False):
+    wanted = bindings(owner, owner_id, commits, self_hosted)
     service_account = account(owner)
     provider_path = '/api/v2/workload-identity-providers/' + PROVIDER
     provider = {'name': PROVIDER, 'type': 'OIDC', 'issuer': 'https://token.actions.githubusercontent.com',
@@ -84,22 +81,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--owner', '--organization', dest='owner', default='automatearmy',
                         help='GitHub organization or user whose repositories may upload.')
-    parser.add_argument('--workflow-repo', default=WORKFLOW_REPO,
-                        help='Repository hosting the approved scan.yml (a mirror when the caller cannot reach this one).')
     parser.add_argument('--trusted-workflow-sha', action='append', required=True)
     parser.add_argument('--allow-self-hosted', action='store_true',
                         help='Trust self-hosted runners such as carini; only for owners that run their own trusted runners.')
     parser.add_argument('--apply', action='store_true', help='Apply the reviewed organization configuration.')
     args = parser.parse_args()
     owner_id = subprocess.check_output(['gh', 'api', 'users/' + args.owner, '--jq', '.id'], text=True).strip()
-    plan = bindings(args.owner, owner_id, args.trusted_workflow_sha, args.workflow_repo, args.allow_self_hosted)
+    plan = bindings(args.owner, owner_id, args.trusted_workflow_sha, args.allow_self_hosted)
     if not args.apply:
         print(json.dumps({'origin': ORIGIN, 'service_account': account(args.owner), 'bindings': plan}, indent=2))
         return
     key, token = os.environ.get('CHECKS_ADMIN_KEY', ''), os.environ.get('CHECKS_ADMIN_TOKEN', '')
     if not (key or token):
         raise ValueError('An administrator must supply CHECKS_ADMIN_KEY or CHECKS_ADMIN_TOKEN for this one-time setup.')
-    configure(Client(token=token, api_key=key), args.owner, owner_id, args.trusted_workflow_sha, args.workflow_repo,
+    configure(Client(token=token, api_key=key), args.owner, owner_id, args.trusted_workflow_sha,
               args.allow_self_hosted)
 
 
