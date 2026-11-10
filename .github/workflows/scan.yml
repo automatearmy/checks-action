@@ -36,7 +36,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Scan and connect to Checks
-        uses: automatearmy/checks-action@12334d97cd8af11041c23e0b6f49b27829946b15
+        uses: automatearmy/checks-action@1245b8df4e4f0eea8c62267cc6b13587bb6216d0
         env:
           CHECKS_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           TRIVY_USERNAME: ${{ secrets.registry-username }}
