@@ -3,6 +3,7 @@
 import argparse
 import base64
 import collections
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -149,6 +150,42 @@ def summarize(report):
     return summary
 
 
+def findings_snapshot(report, env):
+    """Publish an allowlist of metadata, never raw code, secret matches or snippets."""
+    findings = []
+    for result in report.get('Results', []):
+        for key, kind in [('Vulnerabilities', 'vulnerability'), ('Misconfigurations', 'misconfiguration'),
+                          ('Secrets', 'secret')]:
+            for finding in result.get(key, []):
+                if kind == 'misconfiguration' and finding.get('Status') != 'FAIL':
+                    continue
+                item = {'kind': kind, 'severity': finding.get('Severity', 'UNKNOWN'),
+                        'target': str(result.get('Target', ''))[:4000]}
+                fields = {'id': 'VulnerabilityID' if kind == 'vulnerability' else 'ID',
+                          'title': 'Title', 'description': 'Description', 'url': 'PrimaryURL',
+                          'resolution': 'Resolution', 'package': 'PkgName',
+                          'installed_version': 'InstalledVersion', 'fixed_version': 'FixedVersion'}
+                if kind == 'secret':
+                    fields = {'id': 'RuleID'}
+                    item['title'] = 'Secret detected (value redacted)'
+                for name, source in fields.items():
+                    if finding.get(source):
+                        item[name] = str(finding[source])[:4000]
+                location = finding.get('CauseMetadata', {}) if kind == 'misconfiguration' else finding
+                for name, source in [('start_line', 'StartLine'), ('end_line', 'EndLine')]:
+                    if type(location.get(source)) is int and location[source] > 0:
+                        item[name] = location[source]
+                findings.append(item)
+    return {'schema_version': 1, 'repository': env['GITHUB_REPOSITORY'],
+            'branch': env['CHECKS_DEFAULT_BRANCH'], 'commit': env['GITHUB_SHA'],
+            'run_id': int(env['GITHUB_RUN_ID']), 'run_attempt': int(env.get('GITHUB_RUN_ATTEMPT', '1')),
+            'scanned_at': datetime.now(timezone.utc).isoformat(), 'findings': findings}
+
+
+def upload_findings(client, project_id, snapshot):
+    client.request('/api/trivy/v1/projects/' + str(uuid.UUID(project_id)), 'PUT', payload=snapshot)
+
+
 def gate_failed(summary, severities):
     if severities.upper() == 'NONE':
         return False
@@ -199,7 +236,8 @@ def main():
         raise RuntimeError('Uploads are allowed only on the default branch for push, manual, or scheduled runs.')
     directory = Path(tempfile.mkdtemp(prefix='aarmy-checks-', dir=os.environ.get('RUNNER_TEMP') or None))
     scan(args.mode, args.target, directory)
-    summary = summarize(json.loads((directory / 'trivy.json').read_text()))
+    report = json.loads((directory / 'trivy.json').read_text())
+    summary = summarize(report)
     print('Findings by severity: ' + json.dumps(summary))
     uploaded = False
     if args.upload == 'true':
@@ -212,8 +250,9 @@ def main():
         query = urllib.parse.urlencode({'name': repository, 'version': os.environ['CHECKS_DEFAULT_BRANCH']})
         project = client.request('/api/v1/project/lookup?' + query)
         project_id = str(uuid.UUID(project['uuid']))
+        upload_findings(client, project_id, findings_snapshot(report, os.environ))
         uploaded = True
-        print('SBOM processed by Checks. Project: ' + project_id)
+        print('SBOM and sanitized Trivy findings processed by Checks. Project: ' + project_id)
     else:
         project_id = ''
         print('Local scan completed; upload disabled for this run.')
@@ -225,7 +264,8 @@ def main():
             output.write(f'project-uuid={project_id}\nuploaded={str(uploaded).lower()}\n')
     if os.environ.get('GITHUB_STEP_SUMMARY'):
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
-            output.write(f'### Automate Army Checks\n\n[Dashboard]({ORIGIN}) · SBOM uploaded: {uploaded}\n\n')
+            link = ORIGIN + '/projects/' + project_id if uploaded else ORIGIN
+            output.write(f'### Automate Army Checks\n\n[Dashboard]({link}) · SBOM and Trivy findings uploaded: {uploaded}\n\n')
             output.write('| Finding | Critical | High | Medium | Low |\n|---|---:|---:|---:|---:|\n')
             for name, counts in summary.items():
                 output.write(f'| {name} | ' + ' | '.join(str(counts.get(s, 0)) for s in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']) + ' |\n')

@@ -2,7 +2,9 @@
 
 Connect a project to [Checks](https://checks.apps.automatearmy.com/) by adding
 a workflow. Trivy scans dependencies, configuration, and secrets, then uploads
-the SBOM to Dependency-Track using short-lived GitHub OIDC authentication.
+the SBOM and a sanitized scan snapshot using short-lived GitHub OIDC authentication.
+Open a project in Checks and use **Trivy scan** to see all three finding types,
+including infrastructure HIGHs, their files/lines, rule documentation and remediation.
 
 ## Connect a project
 
@@ -64,8 +66,12 @@ with the Docker host at the same paths. Reports and the scan cache use
 - The default gate blocks `HIGH` and `CRITICAL` vulnerabilities, misconfigurations,
   and secrets. The SBOM is uploaded before the gate runs, so findings reach the
   dashboard even when the job fails.
-- Only the SBOM is uploaded. Source code and raw secret findings stay in a private
-  directory on the runner. They are not published as artifacts or printed in logs.
+- The SBOM and allowlisted finding metadata are uploaded. Secret values, code
+  snippets and raw reports stay in a private directory on the runner. They are not
+  published as artifacts or printed in logs. Secret alerts show only rule and location.
+- The project snapshot is replaced on each default-branch scan, including clean
+  scans, and records the commit and GitHub run. An older run cannot overwrite a
+  newer run. A snapshot upload error fails the check rather than reporting success.
 - The client fails on network errors, processing failures, or a ten-minute timeout.
   A completed upload does not guarantee that all vulnerability sources are current.
 - Linux runners with Docker and Python 3 are required. The workflow defaults to
