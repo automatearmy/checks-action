@@ -1,0 +1,20 @@
+name: Scheduled Checks security scans
+on:
+  schedule:
+    - cron: '21 7 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: checks-scheduled-security-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  security:
+    uses: automatearmy/checks-action/.github/workflows/scan.yml@0af90fa4e4c8f753d3a9620503ec79065885f4eb
+    with:
+      source-analysis: true
+      fail-on: NONE
