@@ -167,3 +167,14 @@ python3 scripts/checks.py --target /path/to/project --upload false
 Implementation references: [Dependency-Track 5.2 workload identity](https://dependencytrack.github.io/docs/next/guides/administration/configuring-workload-identity-federation/),
 [GitHub Actions OIDC](https://docs.github.com/en/actions/reference/security/oidc),
 [Trivy SBOM](https://trivy.dev/docs/latest/guide/supply-chain/sbom/).
+
+## Scheduled source analysis
+
+A scheduled default-branch caller can set `source-analysis: true` on the reusable
+`scan.yml` workflow to run Bandit on Python and Checkov on infrastructure definitions
+alongside Trivy. Use the reviewed workflow commit approved for the owner in Checks.
+The two source jobs read the checkout in isolated containers without network access.
+They publish rule IDs, severity and file locations using the existing project-scoped
+publisher. Failed scans publish a failure state. When no applicable inputs are analyzed,
+the job records this in GitHub and leaves the project without a new scanner report.
+The Trivy severity gate continues to follow the caller's `fail-on` setting.
