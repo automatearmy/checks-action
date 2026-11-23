@@ -173,7 +173,8 @@ Implementation references: [Dependency-Track 5.2 workload identity](https://depe
 A scheduled default-branch caller can set `source-analysis: true` on the reusable
 `scan.yml` workflow to run Bandit on Python and Checkov on infrastructure definitions
 alongside Trivy. Use the reviewed workflow commit approved for the owner in Checks.
-The two source jobs read the checkout in isolated containers without network access.
+Trivy runs first to register the project. The two source jobs then run in parallel,
+including when the Trivy findings exceed its severity gate. They read the checkout in isolated containers without network access.
 They publish rule IDs, severity and file locations using the existing project-scoped
 publisher. Failed scans publish a failure state. When no applicable inputs are analyzed,
 the job records this in GitHub and leaves the project without a new scanner report.
