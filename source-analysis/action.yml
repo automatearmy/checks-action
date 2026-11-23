@@ -1,0 +1,16 @@
+name: Checks source analysis
+description: Scan Python and infrastructure definitions and publish location-only results to Checks.
+inputs:
+  scanner:
+    description: bandit or checkov
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Scan and publish
+      shell: bash
+      env:
+        CHECKS_SCANNER: ${{ inputs.scanner }}
+        CHECKS_ACTION_DIR: ${{ github.action_path }}
+        CHECKS_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      run: python3 -I "$CHECKS_ACTION_DIR/../scripts/source_analysis.py" "$CHECKS_SCANNER"
