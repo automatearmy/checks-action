@@ -16,5 +16,6 @@ jobs:
   security:
     uses: automatearmy/checks-action/.github/workflows/scan.yml@0af90fa4e4c8f753d3a9620503ec79065885f4eb
     with:
+      runs_on: ubuntu-latest
       source-analysis: true
       fail-on: NONE
