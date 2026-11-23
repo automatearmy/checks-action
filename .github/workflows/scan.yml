@@ -14,6 +14,10 @@ on:
         description: Source directory or registry image.
         type: string
         default: .
+      source-analysis:
+        description: Run Bandit and Checkov for a default-branch project in addition to Trivy.
+        type: boolean
+        default: false
       fail-on:
         description: Gate severities, or NONE.
         type: string
@@ -46,3 +50,21 @@ jobs:
           target: ${{ inputs.target }}
           fail-on: ${{ inputs.fail-on }}
           upload: ${{ github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && contains(fromJSON('["push","workflow_dispatch","schedule"]'), github.event_name) }}
+
+  source-analysis:
+    if: ${{ inputs.source-analysis && inputs.mode == 'fs' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && contains(fromJSON('["push","schedule","workflow_dispatch"]'), github.event_name) }}
+    runs-on: ${{ inputs.runs_on || (github.repository_owner == 'automatearmy' && 'carini' || 'ubuntu-latest') }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        scanner: [bandit, checkov]
+    steps:
+      - name: Check out project source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Analyze source and publish findings
+        uses: automatearmy/checks-action/source-analysis@55df25dda0264c955df67f6766b82cc93786e9d7
+        with:
+          scanner: ${{ matrix.scanner }}
